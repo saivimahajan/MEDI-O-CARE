@@ -1,0 +1,593 @@
+import mysql.connector
+from datetime import datetime
+import os
+from prettytable import PrettyTable
+from hashlib import sha256
+import csv
+import sys
+print("\n--------------------------------------------------------------------------------------------")
+print(" WELCOME TO MEDI-O-CARE PHARMACY")
+print("-----------------------------------------------------------------------------------------------")
+print("Medi-O-Care is a simple pharmacy database system that helps you")
+print("manage inventory, billing, and stock updates easily.")
+print(" • Remember your admin password for stock and admin actions.")
+print("-----------------------------------------------------------------------------------------------\n")
+# ----------------------------------------------------------------------------------------------------
+# DATABASE CONNECTION
+# ----------------------------------------------------------------------------------------------------
+def get_connection():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root1234"
+    )
+# ----------------------------------------------------------------------------------------------------
+# VALIDATION
+# ----------------------------------------------------------------------------------------------------
+def get_positive_or_null(prompt):
+    while True:
+        value = input(prompt + " (or 'n' for NULL): ").strip()
+        if value.lower() == "n":
+            return None
+        try:
+            value = int(value)
+            if value > 0:
+                return value
+            print("Value must be positive.")
+        except ValueError:
+            print("Invalid input.")
+def get_valid_date(prompt):
+    while True:
+        value = input(prompt + " (YYYY-MM-DD or 'n' for NULL): ").strip()
+        if value.lower() == "n":
+            return None
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+            return value
+        except ValueError:
+            print("Invalid date format.")
+def read_multiline(prompt):
+    print(prompt + " (end with empty line):")
+    lines = []
+    while True:
+        line = input()
+        if line == "":
+            break
+        lines.append(line)
+    return "\n".join(lines)
+# ----------------------------------------------------------------------------------------------------
+def setup_wizard():
+    print("=" * 60)
+    print("      PHARMACY SETUP")
+    print("=" * 60)
+    name = input("Enter Pharmacy Name: ").strip()
+    address = read_multiline("Enter Pharmacy Address")
+    owner = input("Enter Owner Name: ").strip()
+    try:
+        phone = int(input("Enter Phone Number: ").strip())
+    except:
+        print("The inputted value does not match the requirements. Please enter a valid phone number")
+        phone = 0 # prevent crash
+    pwd = input("Enter Admin Password: ").strip()
+    h = sha256()
+    h.update(pwd.encode())
+    hashed = h.hexdigest()
+    with open("cache.dat", "w") as f:
+        f.write(f"name:{name}\n")
+        f.write(f"address:{address}\n")
+        f.write(f"owner:{owner}\n")
+        f.write(f"phone:{phone}\n")
+        f.write(f"password:{hashed}\n")
+    print("\nCreating tables...")
+    con = get_connection()
+    cur = con.cursor()
+    try:
+        cur.execute("USE mediocare")
+    except mysql.connector.Error:
+        print("Database does NOT exist.")
+        cur.execute("CREATE DATABASE IF NOT EXISTS mediocare")
+    cur.execute("USE mediocare")
+    cur.execute(""" CREATE TABLE IF NOT EXISTS medicines (ID INT PRIMARY KEY AUTO_INCREMENT,Name VARCHAR(40),Dosage_mg INT,Company VARCHAR(40),Expiry DATE, Type VARCHAR(30), Qoh INT,Rol INT,Price INT) """)
+    cur.execute("""CREATE TABLE IF NOT EXISTS misc (ID INT PRIMARY KEY AUTO_INCREMENT,Name VARCHAR(40),Dosage_mg INT,Company VARCHAR(40),Expiry DATE,Type VARCHAR(30),Qoh INT, Rol INT,Price INT)AUTO_INCREMENT = 1000""")
+    cur.execute("""INSERT IGNORE INTO medicines VALUES
+          (1, 'Acetaminophen', 500, 'Cipla', '2027-05-10', 'Tablet', 120, 20, 25),
+          (2, 'Ibuprofen', 400, 'Sun Pharma', '2026-11-15', 'Tablet', 100, 20, 30),
+          (3, 'Aspirin', 325, 'Bayer', '2027-03-20', 'Tablet', 80, 15, 20),
+          (4, 'Naproxen', 250, 'Intas Pharma', '2026-12-31', 'Tablet', 90, 20, 35),
+          (5, 'Pseudoephedrine', 30, 'Zydus Life', '2026-08-30', 'Tablet', 70, 10, 15),
+          (6, 'Phenylephrine', 10, 'Mankind', '2027-06-15', 'Tablet', 60, 10, 10),
+          (7, 'Diphenhydramine', 25, 'Glenmark', '2027-02-28', 'Tablet', 100, 20, 18),
+          (8, 'Loratadine', 10, 'GSK', '2027-07-01', 'Tablet', 90, 15, 20),
+          (9, 'Cetirizine', 10, 'Dr Reddy', '2027-08-01', 'Tablet', 100, 20, 15),
+          (10, 'Dextromethorphan', 15, 'Alkem', '2026-12-15', 'Syrup', 60, 10, 40),
+          (11, 'Guaifenesin', 100, 'Cipla', '2026-10-10', 'Syrup', 70, 10, 50),
+          (12, 'Oxymetazoline', 0, 'Sun Pharma', '2027-03-30', 'Nasal Spray', 40, 5, 85),
+          (13, 'Omeprazole', 20, 'Dr Reddy', '2027-04-30', 'Capsule', 120, 25, 25),
+          (14, 'Lansoprazole', 30, 'Cipla', '2027-05-20', 'Capsule', 100, 20, 28),
+          (15, 'Senna', 0, 'Himalaya', '2027-06-15', 'Tablet', 80, 10, 20),
+          (16, 'Loperamide', 2, 'Intas Pharma', '2027-07-25', 'Capsule', 90, 10, 18),
+          (17, 'Fexofenadine', 120, 'Torrent', '2027-09-10', 'Tablet', 100, 20, 25),
+          (18, 'Hydrocortisone Cream', 1, 'Glenmark', '2026-12-31', 'Cream', 50, 5, 60),
+          (19, 'Clotrimazole', 1, 'Pfizer', '2027-03-30', 'Cream', 70, 10, 55),
+          (20, 'Miconazole', 1, 'Dr Reddy', '2026-11-20', 'Cream', 60, 10, 50),
+          (21, 'Neosporin', 0, 'Johnson', '2027-01-10', 'Ointment', 90, 10, 65),
+          (22, 'Calamine Lotion', 0, 'Himalaya', '2027-04-10', 'Lotion', 80, 10, 70),
+          (23, 'Amoxicillin', 500, 'Cipla', '2026-10-15', 'Capsule', 100, 20, 40),
+          (24, 'Azithromycin', 500, 'Abbott', '2026-12-20', 'Tablet', 80, 15, 60),
+          (25, 'Ciprofloxacin', 500, 'Dr Reddy', '2027-01-05', 'Tablet', 90, 15, 55),
+          (26, 'Doxycycline', 100, 'Zydus Life', '2026-09-01', 'Capsule', 70, 10, 45),
+          (27, 'Amlodipine', 5, 'Sun Pharma', '2027-05-05', 'Tablet', 120, 20, 35),
+          (28, 'Lisinopril', 10, 'Mylan', '2026-10-15', 'Tablet', 110, 20, 40),
+          (29, 'Metoprolol', 50, 'Cipla', '2027-02-01', 'Tablet', 90, 15, 45),
+          (30, 'Losartan', 50, 'Dr Reddy', '2026-11-30', 'Tablet', 80, 15, 50),
+          (31, 'Atorvastatin', 10, 'Pfizer', '2027-06-01', 'Tablet', 100, 20, 35),
+          (32, 'Rosuvastatin', 10, 'Aurobindo', '2027-07-10', 'Tablet', 90, 20, 40),
+          (33, 'Simvastatin', 20, 'Sun Pharma', '2027-08-25', 'Tablet', 80, 15, 38),
+          (34, 'Metformin', 500, 'Torrent', '2027-09-30', 'Tablet', 120, 20, 25),
+          (35, 'Glimepiride', 2, 'Cipla', '2027-04-15', 'Tablet', 100, 20, 28),
+          (36, 'Sitagliptin', 100, 'Dr Reddy', '2026-12-01', 'Tablet', 90, 10, 50),
+          (37, 'Sertraline', 50, 'Sun Pharma', '2027-03-15', 'Tablet', 70, 10, 60),
+          (38, 'Fluoxetine', 20, 'Cipla', '2027-02-28', 'Capsule', 80, 10, 55),
+          (39, 'Alprazolam', 0, 'Glenmark', '2026-11-01', 'Tablet', 60, 10, 70),
+          (40, 'Lorazepam', 0, 'Mylan', '2026-10-10', 'Tablet', 60, 10, 65),
+          (41, 'Tramadol', 50, 'Sun Pharma', '2027-01-20', 'Tablet', 70, 10, 75),
+          (42, 'Hydrocodone Combo', 0, 'Abbott', '2026-09-15', 'Tablet', 50, 5, 85),
+          (43, 'Oxycodone', 10, 'Purdue', '2027-03-30', 'Tablet', 50, 5, 90),
+          (44, 'Albuterol Inhaler', 0, 'GSK', '2027-04-15', 'Inhaler', 40, 5, 200),
+          (45, 'Fluticasone Inhaler', 0, 'GSK', '2027-05-10', 'Inhaler', 40, 5, 220),
+          (46, 'Montelukast', 10, 'Merck', '2027-06-01', 'Tablet', 100, 20, 30),
+          (47, 'Ranitidine', 150, 'Sanofi', '2027-01-01', 'Tablet', 100, 20, 25),
+          (48, 'Esomeprazole', 40, 'AstraZeneca', '2027-03-01', 'Capsule', 120, 25, 30),
+          (49, 'Levothyroxine', 50, 'Abbott', '2026-12-31', 'Tablet', 100, 20, 28),
+          (50, 'Warfarin', 5, 'BMS', '2027-02-01', 'Tablet', 90, 15, 35);
+          """)
+    cur.execute("""INSERT IGNORE INTO misc VALUES
+          (10001, 'Multivitamins', 500, 'Himalaya', '2027-12-31', 'Supplement', 30, 10, 250),
+          (10002, 'Vitamin D', 1000, 'Cipla', '2027-06-30', 'Supplement', 20, 10, 180),
+          (10003, 'Vitamin B12', 1000, 'Sun Pharma', '2027-08-20', 'Supplement', 25, 10, 200),
+          (10004, 'Vitamin C', 500, 'Dr Reddy', '2027-07-15', 'Supplement', 30, 10, 220),
+          (10005, 'Calcium Tablets', 600, 'Zydus Life', '2027-05-01', 'Supplement', 20, 10, 150),
+          (10006, 'Iron Tablets', 65, 'Torrent', '2027-04-01', 'Supplement', 20, 10, 160),
+          (10007, 'Omega-3 Fish Oil', 1000, 'Himalaya', '2027-09-01', 'Supplement', 40, 10, 350),
+          (10008, 'Bandages', NULL, 'Johnson', '2029-12-31', 'First Aid', 200, 25, 20),
+          (10009, 'Antiseptic Dettol', NULL, 'Reckitt', '2029-06-30', 'First Aid', 100, 15, 50),
+          (10010, 'Hydrogen Peroxide', NULL, 'Bayer', '2029-03-30', 'First Aid', 120, 10, 30),
+          (10011, 'Iodine Solution', NULL, 'Johnson', '2028-12-01', 'First Aid', 100, 10, 40),
+          (10012, 'Thermometer', NULL, 'Omron', NULL, 'Device', 20, 5, 200),
+          (10013, 'Hot Pack', NULL, 'Hicks', NULL, 'Device', 20, 5, 150),
+          (10014, 'Cold Pack', NULL, 'Hicks', NULL, 'Device', 20, 5, 150),
+          (10015, 'Cotton Roll', NULL, 'Johnson', '2029-01-01', 'First Aid', 150, 15, 40),
+          (10016, 'Gloves', NULL, '3M', '2029-05-01', 'Accessory', 200, 25, 10),
+          (10017, 'Face Mask', NULL, '3M', '2028-02-01', 'Accessory', 300, 25, 10),
+          (10018, 'Syringe', NULL, 'BD', '2029-09-01', 'Instrument', 250, 30, 5),
+          (10019, 'Oximeter', NULL, 'Dr Trust', '2030-03-01', 'Device', 15, 2, 900),
+          (10020, 'Antibiotic Ointment', 5, 'Johnson', '2027-11-15', 'First Aid', 50, 10, 60);
+         """)
+    con.commit()
+    cur.close()
+    con.close()
+    print("Setup completed.\n")
+    if input("Add items now? (y/n): ").lower() == "y":
+        add_items()
+# ----------------------------------------------------------------------------------------------------
+# PASSWORD CHECK
+# ----------------------------------------------------------------------------------------------------
+def verify_admin():
+    try:
+        with open("cache.dat", "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print("Setup not found. Run Setup Wizard first.")
+        return False
+    stored_hash = None
+    for line in lines:
+        if line.startswith("password:"):
+            stored_hash = line.split(":", 1)[1].strip()
+    if stored_hash is None:
+        print("Password not found in setup file.")
+        return False
+    attempts = 0
+    while attempts < 5:
+        pwd = input("Enter admin password: ").strip()
+        h = sha256()
+        h.update(pwd.encode())
+        if h.hexdigest() == stored_hash:
+            return True
+        print("Wrong password.")
+        attempts += 1
+    print("Too many failed attempts.")
+    return False
+# ----------------------------------------------------------------------------------------------------
+# ADD ITEM
+# ----------------------------------------------------------------------------------------------------
+def add_items():
+    print("\n1) Add Medicine")
+    print("2) Add Misc Item")
+    print("If one of these tables are not chosen it will be added to misc table automatically.")
+    choice = input("Choice: ").strip()
+    table = "medicines" if choice == "1" else "misc"
+    name = input("Enter Item Name: ").strip()
+    dosage = get_positive_or_null("Enter Dosage mg")
+    company = input("Enter Company: ").strip()
+    expiry = get_valid_date("Enter Expiry")
+    type_ = input("Enter Type: ").strip()
+    while True:
+        try:
+            price = int(input("Enter Price: "))
+            qoh = get_positive_or_null("Enter QOH (quantity on hand): ")
+            rol = get_positive_or_null("Enter ROL (re order limit): ")
+            break
+        except ValueError:
+            print("Price, QOH and ROL must be integers. Item not added.")
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("USE mediocare")
+    if table == "medicines":
+        cur.execute("""
+            INSERT INTO medicines (Name, Dosage_mg, Company, Expiry, Type,
+            Qoh, Rol, Price)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (name, dosage, company, expiry, type_, qoh, rol, price))
+    else:
+        cur.execute("""
+            INSERT INTO misc (Name, Dosage_mg, Company, Expiry, Type, Qoh, Rol,
+            Price)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (name, dosage, company, expiry, type_, qoh, rol, price))
+    con.commit()
+    cur.close()
+    con.close()
+    print("Item added.\n")
+# ----------------------------------------------------------------------------------------------------
+# VIEW ALL DATA
+# ----------------------------------------------------------------------------------------------------
+def view_all():
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute('USE mediocare')
+    print("\n--- MEDICINES ---")
+    cur.execute("SELECT ID,Name,Dosage_mg,Company,Expiry,Type,Qoh,Rol,Price FROM medicines")
+    rows = cur.fetchall()
+    if rows:
+        t = PrettyTable(["ID", "Name", "Dosage_mg", "Company", "Expiry", "Type", "QOH", "ROL", "Price"])
+        for r in rows:
+            t.add_row(r)
+        print(t)
+    else:
+        print("No medicines.")
+    print("\n--- MISC ---")
+    cur.execute("SELECT ID,Name,Dosage_mg,Company,Expiry,Type,Qoh,Rol,Price FROM misc")
+    rows = cur.fetchall()
+    if rows:
+        t = PrettyTable(["ID", "Name", "Dosage_mg", "Company", "Expiry", "Type", "QOH", "ROL", "Price"])
+        for r in rows:
+            t.add_row(r)
+        print(t)
+    else:
+        print("No misc items.")
+    cur.close()
+    con.close()
+# ----------------------------------------------------------------------------------------------------
+# UPDATE STOCK
+# ----------------------------------------------------------------------------------------------------
+def update_stock():
+    if not verify_admin():
+        return
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("USE mediocare")
+    while True:
+        raw = input("Enter ID (or 'done'): ").strip()
+        if raw.lower() == "done":
+            cur.close()
+            con.close()
+            return
+        try:
+            pid = int(raw)
+        except:
+            print("Invalid ID.")
+            continue
+        cur.execute("SELECT 1 FROM medicines WHERE ID=%s", (pid,))
+        in_medicines = cur.fetchone() is not None
+        cur.execute("SELECT 1 FROM misc WHERE ID=%s", (pid,))
+        in_misc = cur.fetchone() is not None
+        if in_medicines and not in_misc:
+            table = "medicines"
+        elif in_misc and not in_medicines:
+            table = "misc"
+        elif in_medicines and in_misc:
+            print("ID found in both tables. Which table do you want to update?")
+            print("1) Medicines 2) Misc")
+            t = input("Select table: ").strip()
+            table = "medicines" if t == "1" else "misc"
+        else:
+            print("Invalid ID.")
+            continue
+        cur.execute(f"SELECT Qoh FROM {table} WHERE ID=%s", (pid,))
+        res = cur.fetchone()
+        current_qoh = res[0] if res and res[0] is not None else 0
+        newq = get_positive_or_null("Enter quantity to ADD to QOH")
+        if newq is None:
+            print("No change made for this item.")
+            continue
+        try:
+            newq_int = int(newq)
+        except:
+            print("QOH must be an integer. Stock not updated.")
+            continue
+        cur.execute(f"UPDATE {table} SET Qoh = Qoh + %s WHERE ID = %s",
+                    (newq_int, pid))
+        con.commit()
+        print(f"Stock updated for ID {pid} in table '{table}'. Previous QOH: {current_qoh}, Added: {newq_int}, New QOH: {current_qoh + newq_int}")
+# ----------------------------------------------------------------------------------------------------
+# REORDER LIST
+# ----------------------------------------------------------------------------------------------------
+def reorder_list():
+    if not verify_admin():
+        return
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("USE mediocare")
+    for table in ["medicines", "misc"]:
+        cur.execute(f"SELECT Name, Qoh, Rol FROM {table} WHERE Qoh <= Rol")
+        rows = cur.fetchall()
+        print(f"\n{table.upper()} needing reorder:")
+        if not rows:
+            print("None.")
+            continue
+        t = PrettyTable(["Name", "QOH", "ROL"])
+        for r in rows:
+            t.add_row(r)
+        print(t)
+    cur.close()
+    con.close()
+# ----------------------------------------------------------------------------------------------------
+# SEARCH FUNCTION
+# ----------------------------------------------------------------------------------------------------
+def search_items():
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute("USE mediocare")
+    term = input("\nEnter name or partial name: ").strip()
+    if not term:
+        print("Empty search.")
+        cur.close()
+        con.close()
+        return
+    pattern = "%" + term + "%"
+    print("\n--- Medicines ---")
+    cur.execute("SELECT ID,Name,Price,Qoh FROM medicines WHERE Name LIKE %s", (pattern,))
+    med = cur.fetchall()
+    if med:
+        t = PrettyTable(["ID", "Name", "Price", "QOH"])
+        for r in med:
+            t.add_row(r)
+        print(t)
+    else:
+        print("No matches.")
+    print("\n--- Misc ---")
+    cur.execute("SELECT ID,Name,Price,Qoh FROM misc WHERE Name LIKE %s", (pattern,))
+    ms = cur.fetchall()
+    if ms:
+        t = PrettyTable(["ID", "Name", "Price", "QOH"])
+        for r in ms:
+            t.add_row(r)
+        print(t)
+    else:
+        print("No matches.")
+    cur.close()
+    con.close()
+# ----------------------------------------------------------------------------------------------------
+# UPDATE EXISTING
+# ----------------------------------------------------------------------------------------------------
+def update_existing():
+    while True:
+        table_choice = input("Update 1) Medicines or 2) Misc: ").strip()
+        if table_choice in ("1", "2"):
+            break
+        print("Invalid choice. Please enter 1 for Medicines or 2 for Misc.")
+    table = "medicines" if table_choice == "1" else "misc"
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute('USE mediocare')
+    while True:
+        id_ = get_positive_or_null("Enter ID:")
+        if id_ is None:
+            print("Please enter a valid positive integer ID.")
+            continue
+        try:
+            cur.execute(f"SELECT 1 FROM {table} WHERE ID=%s", (id_,))
+            if cur.fetchone():
+                break
+            else:
+                print(f"ID {id_} not found in table {table}. Please enter a valid ID.")
+        except mysql.connector.Error as e:
+            print("Database error when checking ID:", e)
+            cur.close()
+            con.close()
+            return
+    allowed_columns = ["Name", "Dosage_mg", "Company", "Expiry", "Type", "Qoh",
+                       "Rol", "Price"]
+    print("Valid columns:", ", ".join(allowed_columns))
+    while True:
+        column = input("Column name: ").strip()
+        if column in allowed_columns:
+            break
+        print("Invalid column name. Enter one of:", ", ".join(allowed_columns))
+    value = input("New value: ").strip()
+    try:
+        cur.execute(f"UPDATE {table} SET {column} = %s WHERE ID = %s", (value, id_))
+        con.commit()
+    except mysql.connector.Error as e:
+        print("Error updating value:", e)
+    finally:
+        cur.close()
+        con.close()
+    print("Updated. \n")
+# ----------------------------------------------------------------------------------------------------
+# BILLING
+# ----------------------------------------------------------------------------------------------------
+def billing():
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute('use mediocare')
+    print("\n--- MEDICINES ---")
+    cur.execute("SELECT ID,Name,Price,Qoh FROM medicines")
+    t1 = PrettyTable(["ID", "Name", "Price", "QOH"])
+    for r in cur.fetchall():
+        t1.add_row(r)
+    print(t1)
+    print("\n--- MISC ---")
+    cur.execute("SELECT ID,Name,Price,Qoh FROM misc")
+    t2 = PrettyTable(["ID", "Name", "Price", "QOH"])
+    for r in cur.fetchall():
+        t2.add_row(r)
+    print(t2)
+    cart = []
+    reserved = {}
+    while True:
+        raw = input("\nEnter ID (or 'done'): ").strip()
+        if raw.lower() == "done":
+            break
+        try:
+            pid = int(raw)
+        except:
+            print("Invalid ID.")
+            continue
+        qty = input("Qty: ").strip()
+        try:
+            qty = int(qty)
+            if qty <= 0:
+                print("Quantity must be positive.")
+                continue
+        except:
+            print("Invalid quantity.")
+            continue
+        cur.execute("""
+            SELECT ID,Name,Price,Qoh,'medicines' FROM medicines WHERE ID=%s
+            UNION
+            SELECT ID,Name,Price,Qoh,'misc' FROM misc WHERE ID=%s
+        """, (pid, pid))
+        item = cur.fetchone()
+        if not item:
+            print("Invalid ID.")
+            continue
+        item_id = item[0]
+        item_name = item[1]
+        item_price = item[2]
+        item_qoh = item[3] if item[3] is not None else 0
+        item_src = item[4]
+        key = (item_id, item_src)
+        already_reserved = reserved.get(key, 0)
+        available = item_qoh - already_reserved
+        if available <= 0:
+            print(f"Out of stock. No units available for '{item_name}' (ID {item_id}).")
+            continue
+        if qty > available:
+            print(f"Out of stock. Only {available} unit(s) available for '{item_name}'.")
+            continue
+        reserved[key] = already_reserved + qty
+        cart.append((item_id, item_name, item_price, qty, item_src))
+    if not cart:
+        print("Empty cart.")
+        cur.close()
+        con.close()
+        return
+    bt = PrettyTable(["ID", "Name", "Qty", "Rate", "Amount"])
+    total = 0
+    for id_, name, price, qty, src in cart:
+        amt = price * qty
+        total += amt
+        bt.add_row([id_, name, qty, price, amt])
+        if src == "medicines":
+            cur.execute("UPDATE medicines SET Qoh=Qoh-%s WHERE ID=%s", (qty, id_))
+        else:
+            cur.execute("UPDATE misc SET Qoh=Qoh-%s WHERE ID=%s", (qty, id_))
+    con.commit()
+    print("\n--- BILL ---")
+    print(bt)
+    print("TOTAL: {}".format(total))
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    home = os.path.expanduser("~")
+    path = os.path.join(home, "Documents")
+    if not os.path.isdir(path):
+        path = home
+    file = os.path.join(path, "receipt_{}.txt".format(now))
+    with open(file, "w") as f:
+        f.write(bt.get_string())
+        f.write("\nTOTAL: {}".format(total))
+    print("Receipt saved: {}".format(file))
+    cur.close()
+    con.close()
+# ------------------------------------------------------------------------------------------------------
+# MAIN MENU
+# ------------------------------------------------------------------------------------------------------
+def main_menu():
+    con = get_connection()
+    cur = con.cursor()
+    try:
+        cur.execute("USE mediocare")
+    except mysql.connector.Error:
+        print("Database does NOT exist. Redirecting to setup wizard.")
+        setup_wizard()
+    try:
+        cur.close()
+        con.close()
+    except Exception:
+        pass
+    while True:
+        print("\n============== MAIN MENU ==============")
+        print("1) Run Setup Wizard")
+        print("2) Admin menu")
+        print("3) User Menu")
+        print("4) View All Data")
+        print("9) Exit")
+        c = input("Choice: ").strip()
+        if c == "1":
+            setup_wizard()
+        elif c == "2":
+            while True:
+                print("1) Add Items")
+                print("2) Update Stock")
+                print("3) View Items To Reorder")
+                print("4) Update Existing")
+                print("9) Exit")
+                c = input("Choice: ").strip()
+                if c == "1":
+                    add_items()
+                elif c == "2":
+                    update_stock()
+                elif c == "3":
+                    reorder_list()
+                elif c == "4":
+                    update_existing()
+                elif c == "9":
+                    break
+                else:
+                    print("Invalid choice.")
+        elif c == "3":
+            while True:
+                print("1) Search items")
+                print("2) Process Purchase")
+                print("9) Exit")
+                c = input("Choice: ").strip()
+                if c == "1":
+                    search_items()
+                elif c == "2":
+                    billing()
+                elif c == "9":
+                    break
+                else:
+                    print("Invalid choice.")
+        elif c == "4":
+            view_all()
+        elif c == "9":
+            print("Exiting. Goodbye!")
+            break
+        else:
+            print("Invalid choice.")
+# ----------------------------------------------------------------------------------------------------
+# RUN
+# ----------------------------------------------------------------------------------------------------
+if __name__ == "__main__":
+    main_menu()
